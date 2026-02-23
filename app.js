@@ -24,6 +24,9 @@ const state = {
     suppressNextClick: false,
     lastX: 0,
     lastY: 0,
+    pointers: new Map(),
+    pinchStartDistance: 0,
+    pinchStartCamera: 0,
   },
 };
 
@@ -31,6 +34,10 @@ const dirs = buildDirections();
 
 const dom = {
   boardSize: document.getElementById("boardSize"),
+  appRoot: document.getElementById("appRoot"),
+  mobileTabs: document.getElementById("mobileTabs"),
+  showBoardBtn: document.getElementById("showBoardBtn"),
+  showControlsBtn: document.getElementById("showControlsBtn"),
   newGameBtn: document.getElementById("newGameBtn"),
   visualModeBtn: document.getElementById("visualModeBtn"),
   coordModeBtn: document.getElementById("coordModeBtn"),
@@ -58,6 +65,7 @@ boot();
 
 function boot() {
   wireEvents();
+  wireResponsive();
   newGame(state.size);
   updateViewInputs();
   updateGravityUi();
@@ -89,6 +97,7 @@ function wireEvents() {
   dom.boardContainer.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
   dom.boardContainer.addEventListener("wheel", onWheelZoom, { passive: false });
   dom.boardContainer.addEventListener("click", suppressClickAfterDrag, true);
 
@@ -96,6 +105,13 @@ function wireEvents() {
   dom.coordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") tryPlaceFromInput();
   });
+}
+
+function wireResponsive() {
+  dom.showBoardBtn.addEventListener("click", () => setMobilePanel("board"));
+  dom.showControlsBtn.addEventListener("click", () => setMobilePanel("controls"));
+  window.addEventListener("resize", applyResponsiveLayout);
+  applyResponsiveLayout();
 }
 
 function setMode(mode) {
@@ -113,6 +129,9 @@ function setMode(mode) {
       : "Visual mode on. Click a cell to place."
   );
   updateCoordInputUi();
+  if (mode === "coord" && isMobileLayout()) {
+    setMobilePanel("controls");
+  }
   renderBoard();
 }
 
@@ -318,34 +337,73 @@ function updateViewInputs() {
 
 function onPointerDown(e) {
   if (state.mode !== "visual") return;
+  if (!dom.boardContainer.contains(e.target)) return;
+  state.drag.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   state.drag.active = true;
-  state.drag.moved = false;
-  state.drag.lastX = e.clientX;
-  state.drag.lastY = e.clientY;
+  if (state.drag.pointers.size === 1) {
+    state.drag.moved = false;
+    state.drag.lastX = e.clientX;
+    state.drag.lastY = e.clientY;
+  } else if (state.drag.pointers.size === 2) {
+    const [a, b] = [...state.drag.pointers.values()];
+    state.drag.pinchStartDistance = distance2D(a, b);
+    state.drag.pinchStartCamera = state.view.distance;
+  }
   dom.boardContainer.classList.add("dragging");
+  e.preventDefault();
 }
 
 function onPointerMove(e) {
   if (!state.drag.active || state.mode !== "visual") return;
-  const dx = e.clientX - state.drag.lastX;
-  const dy = e.clientY - state.drag.lastY;
-  if (Math.abs(dx) + Math.abs(dy) > 2) {
-    state.drag.moved = true;
-  }
-  state.drag.lastX = e.clientX;
-  state.drag.lastY = e.clientY;
+  if (!state.drag.pointers.has(e.pointerId)) return;
+  state.drag.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  state.view.rotZ = clamp(state.view.rotZ + dx * 0.35, -85, 20);
-  state.view.rotX = clamp(state.view.rotX - dy * 0.35, 25, 85);
-  updateViewInputs();
-  applyViewTransform();
+  if (state.drag.pointers.size === 1) {
+    const dx = e.clientX - state.drag.lastX;
+    const dy = e.clientY - state.drag.lastY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) {
+      state.drag.moved = true;
+    }
+    state.drag.lastX = e.clientX;
+    state.drag.lastY = e.clientY;
+
+    state.view.rotZ = clamp(state.view.rotZ + dx * 0.35, -85, 20);
+    state.view.rotX = clamp(state.view.rotX - dy * 0.35, 25, 85);
+    updateViewInputs();
+    applyViewTransform();
+  } else if (state.drag.pointers.size >= 2) {
+    const [a, b] = [...state.drag.pointers.values()];
+    const currentDistance = distance2D(a, b);
+    if (state.drag.pinchStartDistance === 0) {
+      state.drag.pinchStartDistance = currentDistance;
+      state.drag.pinchStartCamera = state.view.distance;
+    }
+    const delta = currentDistance - state.drag.pinchStartDistance;
+    state.view.distance = clamp(state.drag.pinchStartCamera + delta * 0.8, -260, 360);
+    state.drag.moved = true;
+    updateViewInputs();
+    applyViewTransform();
+  }
+  e.preventDefault();
 }
 
-function onPointerUp() {
+function onPointerUp(e) {
   if (!state.drag.active) return;
-  state.drag.active = false;
-  state.drag.suppressNextClick = state.drag.moved;
-  dom.boardContainer.classList.remove("dragging");
+  state.drag.pointers.delete(e.pointerId);
+
+  if (state.drag.pointers.size === 1) {
+    const [only] = [...state.drag.pointers.values()];
+    state.drag.lastX = only.x;
+    state.drag.lastY = only.y;
+    state.drag.pinchStartDistance = 0;
+  }
+
+  if (state.drag.pointers.size === 0) {
+    state.drag.active = false;
+    state.drag.suppressNextClick = state.drag.moved;
+    state.drag.pinchStartDistance = 0;
+    dom.boardContainer.classList.remove("dragging");
+  }
 }
 
 function suppressClickAfterDrag(e) {
@@ -569,4 +627,32 @@ function getBoardShiftY() {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function distance2D(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function isMobileLayout() {
+  return window.matchMedia("(max-width: 980px)").matches;
+}
+
+function applyResponsiveLayout() {
+  const mobile = isMobileLayout();
+  dom.appRoot.classList.toggle("mobile-layout", mobile);
+  dom.mobileTabs.classList.toggle("hidden", !mobile);
+  if (!mobile) return;
+  if (!dom.appRoot.classList.contains("mobile-board") && !dom.appRoot.classList.contains("mobile-controls")) {
+    setMobilePanel("board");
+  }
+}
+
+function setMobilePanel(panel) {
+  if (!isMobileLayout()) return;
+  dom.appRoot.classList.remove("mobile-board", "mobile-controls");
+  dom.appRoot.classList.add(panel === "controls" ? "mobile-controls" : "mobile-board");
+  dom.showBoardBtn.classList.toggle("active", panel === "board");
+  dom.showControlsBtn.classList.toggle("active", panel === "controls");
 }

@@ -31,6 +31,10 @@ body {
   padding: 18px;
 }
 
+.mobile-tabs {
+  display: none;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -196,6 +200,8 @@ button:active {
   place-items: center;
   cursor: grab;
   user-select: none;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .board-container.dragging {
@@ -327,14 +333,59 @@ button:active {
 
 @media (max-width: 980px) {
   .app {
-    grid-template-columns: 1fr;
+    display: block;
+    padding: 10px;
+  }
+
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    position: sticky;
+    top: 8px;
+    z-index: 20;
+    background: color-mix(in srgb, var(--panel) 94%, white);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 6px;
+    margin-bottom: 10px;
+  }
+
+  .mobile-tab {
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .mobile-tab.active {
+    background: #def7f3;
+    border-color: var(--accent);
+    color: #0b5c55;
+  }
+
+  .controls,
+  .board-panel {
+    margin-bottom: 10px;
+  }
+
+  .app.mobile-layout.mobile-board .controls {
+    display: none;
+  }
+
+  .app.mobile-layout.mobile-controls .board-panel {
+    display: none;
   }
 
   .board-container {
-    min-height: 60vh;
+    min-height: calc(100vh - 120px);
   }
 
   .board-panel {
-    min-height: auto;
+    min-height: calc(100vh - 88px);
+    margin-bottom: 0;
+  }
+
+  .controls {
+    max-height: calc(100vh - 88px);
+    overflow: auto;
   }
 }
