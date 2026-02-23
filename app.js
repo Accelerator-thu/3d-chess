@@ -13,6 +13,8 @@ const state = {
   gravity: false,
   gravityLocked: false,
   pendingDropAnim: null,
+  setupMode: "visual",
+  setupGravity: false,
   view: {
     rotX: 58,
     rotZ: -34,
@@ -33,11 +35,17 @@ const state = {
 const dirs = buildDirections();
 
 const dom = {
+  setupScreen: document.getElementById("setupScreen"),
+  gameScreen: document.getElementById("gameScreen"),
+  setupBoardSize: document.getElementById("setupBoardSize"),
+  setupVisualModeBtn: document.getElementById("setupVisualModeBtn"),
+  setupCoordModeBtn: document.getElementById("setupCoordModeBtn"),
+  setupGravityToggle: document.getElementById("setupGravityToggle"),
+  startGameBtn: document.getElementById("startGameBtn"),
+  backToSetupBtn: document.getElementById("backToSetupBtn"),
+  toggleControlsBtn: document.getElementById("toggleControlsBtn"),
   boardSize: document.getElementById("boardSize"),
   appRoot: document.getElementById("appRoot"),
-  mobileTabs: document.getElementById("mobileTabs"),
-  showBoardBtn: document.getElementById("showBoardBtn"),
-  showControlsBtn: document.getElementById("showControlsBtn"),
   newGameBtn: document.getElementById("newGameBtn"),
   visualModeBtn: document.getElementById("visualModeBtn"),
   coordModeBtn: document.getElementById("coordModeBtn"),
@@ -65,30 +73,25 @@ boot();
 
 function boot() {
   wireEvents();
-  wireResponsive();
-  newGame(state.size);
-  updateViewInputs();
-  updateGravityUi();
+  initializeSetupScreen();
+  enterSetupPhase();
 }
 
 function wireEvents() {
-  dom.newGameBtn.addEventListener("click", () => {
-    const size = Number(dom.boardSize.value);
-    if (!Number.isInteger(size) || size < 4 || size > 6) {
-      setMessage("Board size must be an integer between 4 and 6.");
-      return;
-    }
-    newGame(size);
+  dom.startGameBtn.addEventListener("click", startConfiguredGame);
+  dom.backToSetupBtn.addEventListener("click", enterSetupPhase);
+  dom.toggleControlsBtn.addEventListener("click", () =>
+    setGameControlsOpen(dom.appRoot.classList.contains("game-controls-hidden"))
+  );
+  dom.setupVisualModeBtn.addEventListener("click", () => setSetupMode("visual"));
+  dom.setupCoordModeBtn.addEventListener("click", () => setSetupMode("coord"));
+  dom.setupGravityToggle.addEventListener("change", () => {
+    state.setupGravity = dom.setupGravityToggle.checked;
   });
 
+  dom.newGameBtn.addEventListener("click", () => newGame(state.size));
   dom.resetBtn.addEventListener("click", () => newGame(state.size));
   dom.undoBtn.addEventListener("click", undoMove);
-
-  dom.visualModeBtn.addEventListener("click", () => setMode("visual"));
-  dom.coordModeBtn.addEventListener("click", () => setMode("coord"));
-  dom.gravityToggle.addEventListener("change", () =>
-    setGravityMode(dom.gravityToggle.checked)
-  );
 
   dom.rotXInput.addEventListener("input", handleViewChange);
   dom.rotZInput.addEventListener("input", handleViewChange);
@@ -107,11 +110,55 @@ function wireEvents() {
   });
 }
 
-function wireResponsive() {
-  dom.showBoardBtn.addEventListener("click", () => setMobilePanel("board"));
-  dom.showControlsBtn.addEventListener("click", () => setMobilePanel("controls"));
-  window.addEventListener("resize", applyResponsiveLayout);
-  applyResponsiveLayout();
+function initializeSetupScreen() {
+  dom.setupBoardSize.value = String(state.size);
+  setSetupMode(state.setupMode);
+  dom.setupGravityToggle.checked = state.setupGravity;
+  updateViewInputs();
+}
+
+function setSetupMode(mode) {
+  state.setupMode = mode;
+  dom.setupVisualModeBtn.classList.toggle("active", mode === "visual");
+  dom.setupCoordModeBtn.classList.toggle("active", mode === "coord");
+}
+
+function startConfiguredGame() {
+  const size = Number(dom.setupBoardSize.value);
+  if (!Number.isInteger(size) || size < 4 || size > 6) {
+    dom.setupBoardSize.focus();
+    return;
+  }
+
+  state.setupGravity = dom.setupGravityToggle.checked;
+  state.gravity = state.setupGravity;
+  state.gravityLocked = false;
+  dom.gravityToggle.checked = state.gravity;
+  updateGravityUi();
+
+  setMode(state.setupMode);
+  newGame(size);
+  enterGamePhase();
+  setGameControlsOpen(state.mode === "coord");
+}
+
+function enterSetupPhase() {
+  dom.setupScreen.classList.remove("hidden");
+  dom.gameScreen.classList.add("hidden");
+  dom.setupBoardSize.value = String(state.size);
+  setSetupMode(state.mode);
+  dom.setupGravityToggle.checked = state.gravity;
+}
+
+function enterGamePhase() {
+  dom.setupScreen.classList.add("hidden");
+  dom.gameScreen.classList.remove("hidden");
+  renderBoard();
+}
+
+function setGameControlsOpen(open) {
+  dom.appRoot.classList.toggle("game-controls-hidden", !open);
+  dom.toggleControlsBtn.textContent = open ? "Hide Controls" : "Show Controls";
 }
 
 function setMode(mode) {
@@ -129,8 +176,8 @@ function setMode(mode) {
       : "Visual mode on. Click a cell to place."
   );
   updateCoordInputUi();
-  if (mode === "coord" && isMobileLayout()) {
-    setMobilePanel("controls");
+  if (mode === "coord" && !dom.gameScreen.classList.contains("hidden")) {
+    setGameControlsOpen(true);
   }
   renderBoard();
 }
@@ -633,26 +680,4 @@ function distance2D(a, b) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.sqrt(dx * dx + dy * dy);
-}
-
-function isMobileLayout() {
-  return window.matchMedia("(max-width: 980px)").matches;
-}
-
-function applyResponsiveLayout() {
-  const mobile = isMobileLayout();
-  dom.appRoot.classList.toggle("mobile-layout", mobile);
-  dom.mobileTabs.classList.toggle("hidden", !mobile);
-  if (!mobile) return;
-  if (!dom.appRoot.classList.contains("mobile-board") && !dom.appRoot.classList.contains("mobile-controls")) {
-    setMobilePanel("board");
-  }
-}
-
-function setMobilePanel(panel) {
-  if (!isMobileLayout()) return;
-  dom.appRoot.classList.remove("mobile-board", "mobile-controls");
-  dom.appRoot.classList.add(panel === "controls" ? "mobile-controls" : "mobile-board");
-  dom.showBoardBtn.classList.toggle("active", panel === "board");
-  dom.showControlsBtn.classList.toggle("active", panel === "controls");
 }

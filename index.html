@@ -7,89 +7,120 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main id="appRoot" class="app">
-      <nav id="mobileTabs" class="mobile-tabs">
-        <button id="showBoardBtn" class="mobile-tab active">Board</button>
-        <button id="showControlsBtn" class="mobile-tab">Controls</button>
-      </nav>
-
-      <section class="panel controls">
+    <section id="setupScreen" class="setup-screen">
+      <div class="panel setup-card">
         <h1>3D Four-in-a-Row</h1>
-        <p class="subtitle">Win by lining up 4 stones in 3D space.</p>
+        <p class="subtitle">Configure your match, then start fullscreen gameplay.</p>
 
         <div class="control-group">
-          <label for="boardSize">Board size (N x N x N)</label>
-          <input id="boardSize" type="number" min="4" max="6" value="5" />
-          <button id="newGameBtn">New Game</button>
+          <label for="setupBoardSize">Board size (N x N x N)</label>
+          <input id="setupBoardSize" type="number" min="4" max="6" value="5" />
         </div>
 
         <div class="control-group">
           <label>Game Mode</label>
           <div class="mode-buttons">
-            <button id="visualModeBtn" class="mode-btn active">Visual Board</button>
-            <button id="coordModeBtn" class="mode-btn">Blind Coordinates</button>
+            <button id="setupVisualModeBtn" class="mode-btn active">Visual Board</button>
+            <button id="setupCoordModeBtn" class="mode-btn">Blind Coordinates</button>
           </div>
         </div>
 
         <div class="control-group">
           <label>Physics</label>
-          <label class="toggle-row" for="gravityToggle">
-            <input id="gravityToggle" type="checkbox" />
+          <label class="toggle-row" for="setupGravityToggle">
+            <input id="setupGravityToggle" type="checkbox" />
             <span>Gravity Mode (drop in z-direction)</span>
           </label>
-          <div id="gravityHint" class="hint-text">
-            OFF: place directly at (x,y,z)
+        </div>
+
+        <button id="startGameBtn" class="start-btn">Start Game</button>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="game-screen hidden">
+      <header class="game-topbar">
+        <button id="backToSetupBtn">Back to Setup</button>
+        <button id="toggleControlsBtn">Show Controls</button>
+      </header>
+
+      <main id="appRoot" class="app game-fullscreen game-controls-hidden">
+        <section class="panel controls">
+          <h1>In-Game Controls</h1>
+          <p class="subtitle">Adjust camera, enter moves, and manage the match.</p>
+
+          <div class="control-group hidden">
+            <label for="boardSize">Board size (N x N x N)</label>
+            <input id="boardSize" type="number" min="4" max="6" value="5" />
+            <button id="newGameBtn">New Game</button>
           </div>
-        </div>
 
-        <div id="cameraPanel" class="control-group">
-          <label>Board Rotation</label>
-          <div class="slider-group">
-            <span>Pitch (X)</span>
-            <input id="rotXInput" type="range" min="25" max="85" value="58" />
+          <div class="control-group hidden">
+            <label>Game Mode</label>
+            <div class="mode-buttons">
+              <button id="visualModeBtn" class="mode-btn active">Visual Board</button>
+              <button id="coordModeBtn" class="mode-btn">Blind Coordinates</button>
+            </div>
           </div>
-          <div class="slider-group">
-            <span>Yaw (Z)</span>
-            <input id="rotZInput" type="range" min="-85" max="20" value="-34" />
+
+          <div class="control-group hidden">
+            <label>Physics</label>
+            <label class="toggle-row" for="gravityToggle">
+              <input id="gravityToggle" type="checkbox" />
+              <span>Gravity Mode (drop in z-direction)</span>
+            </label>
           </div>
-          <div class="slider-group">
-            <span>Distance</span>
-            <input id="zoomInput" type="range" min="-260" max="360" value="120" />
+
+          <div id="gravityHint" class="hint-text"></div>
+
+          <div id="cameraPanel" class="control-group">
+            <label>Board Rotation</label>
+            <div class="slider-group">
+              <span>Pitch (X)</span>
+              <input id="rotXInput" type="range" min="25" max="85" value="58" />
+            </div>
+            <div class="slider-group">
+              <span>Yaw (Z)</span>
+              <input id="rotZInput" type="range" min="-85" max="20" value="-34" />
+            </div>
+            <div class="slider-group">
+              <span>Distance</span>
+              <input id="zoomInput" type="range" min="-260" max="360" value="120" />
+            </div>
+            <button id="resetViewBtn">Reset View</button>
           </div>
-          <button id="resetViewBtn">Reset View</button>
-        </div>
 
-        <div id="coordPanel" class="control-group hidden">
-          <label id="coordLabel" for="coordInput">Place at x,y,z (1-based)</label>
-          <input id="coordInput" type="text" placeholder="e.g. 2,4,1" />
-          <button id="placeCoordBtn">Place</button>
-        </div>
+          <div id="coordPanel" class="control-group hidden">
+            <label id="coordLabel" for="coordInput">Place at x,y,z (1-based)</label>
+            <input id="coordInput" type="text" placeholder="e.g. 2,4,1" />
+            <button id="placeCoordBtn">Place</button>
+          </div>
 
-        <div class="control-group row">
-          <button id="undoBtn">Undo</button>
-          <button id="resetBtn">Reset</button>
-        </div>
+          <div class="control-group row">
+            <button id="undoBtn">Undo</button>
+            <button id="resetBtn">Reset Match</button>
+          </div>
 
-        <div class="status-box">
-          <div id="turnText"></div>
-          <div id="messageText"></div>
-        </div>
+          <div class="status-box">
+            <div id="turnText"></div>
+            <div id="messageText"></div>
+          </div>
 
-        <div class="legend">
-          <span><i class="dot p1"></i> Player 1 (X)</span>
-          <span><i class="dot p2"></i> Player 2 (O)</span>
-        </div>
+          <div class="legend">
+            <span><i class="dot p1"></i> Player 1 (X)</span>
+            <span><i class="dot p2"></i> Player 2 (O)</span>
+          </div>
 
-        <div class="control-group">
-          <label>Move History</label>
-          <div id="moveLog" class="move-log"></div>
-        </div>
-      </section>
+          <div class="control-group">
+            <label>Move History</label>
+            <div id="moveLog" class="move-log"></div>
+          </div>
+        </section>
 
-      <section id="boardPanel" class="panel board-panel">
-        <div id="boardContainer" class="board-container"></div>
-      </section>
-    </main>
+        <section id="boardPanel" class="panel board-panel">
+          <div id="boardContainer" class="board-container"></div>
+        </section>
+      </main>
+    </section>
 
     <script src="./app.js"></script>
   </body>
