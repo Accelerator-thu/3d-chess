@@ -9,11 +9,20 @@
   <body>
     <section id="setupScreen" class="setup-screen">
       <div class="panel setup-card">
-        <h1>3D Four-in-a-Row</h1>
+        <h1>3D / 4D Four-in-a-Row</h1>
         <p class="subtitle">Configure your match, then start fullscreen gameplay.</p>
 
         <div class="control-group">
-          <label for="setupBoardSize">Board size (N x N x N)</label>
+          <label>Dimensions</label>
+          <div class="mode-buttons">
+            <button id="setup3DBtn" class="mode-btn active">3D Board</button>
+            <button id="setup4DBtn" class="mode-btn">4D Board</button>
+          </div>
+          <div class="hint-text" id="dimHint">3D: one N×N×N board — 13 win directions.</div>
+        </div>
+
+        <div class="control-group">
+          <label for="setupBoardSize">Board size</label>
           <input id="setupBoardSize" type="number" min="4" max="6" value="5" />
         </div>
 

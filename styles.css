@@ -380,6 +380,69 @@ button:active {
   }
 }
 
+/* ─── 4D layout ─────────────────────────────────────────────────────────── */
+
+.board-container.mode-4d {
+  /* Keep the base display:grid; place-items:center from .board-container */
+  /* just adjust padding for the topbar */
+  padding-top: 56px;
+  padding-bottom: 24px;
+  align-content: center;
+}
+
+.boards-4d {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 52px;
+  align-items: flex-start;
+  justify-content: center;
+  /* transform-style: flat (default) — blocks .board-container's perspective
+     so each .w-section gets its own independent perspective context */
+}
+
+.w-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  /* Own perspective context per sub-board: correct hit-testing + rendering */
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
+}
+
+.w-section-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: #def7f3;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 3px 10px;
+  margin-top: 10px;
+}
+
+/* Smaller cells and tighter gaps inside 4D sub-boards */
+.board-container.mode-4d .cell {
+  width: 32px;
+  height: 32px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+}
+
+.board-container.mode-4d .layer {
+  gap: 3px;
+  padding: 6px;
+}
+
+.board-container.mode-4d .layer-label {
+  right: -58px;
+  font-size: 0.76rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 .move-log {
   border: 1px solid var(--line);
   border-radius: 8px;

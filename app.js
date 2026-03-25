@@ -19,6 +19,8 @@ const state = {
   aiThinking: false,
   setupVsAI: false,
   aiGeneration: 0,
+  is4D: false,
+  setup4D: false,
   view: {
     rotX: 58,
     rotZ: -34,
@@ -36,7 +38,8 @@ const state = {
   },
 };
 
-const dirs = buildDirections();
+const dirs3D = buildDirections3D();
+const dirs4D = buildDirections4D();
 
 const dom = {
   setupScreen: document.getElementById("setupScreen"),
@@ -47,6 +50,9 @@ const dom = {
   setupGravityToggle: document.getElementById("setupGravityToggle"),
   setupTwoPlayerBtn: document.getElementById("setupTwoPlayerBtn"),
   setupVsAIBtn: document.getElementById("setupVsAIBtn"),
+  setup3DBtn: document.getElementById("setup3DBtn"),
+  setup4DBtn: document.getElementById("setup4DBtn"),
+  dimHint: document.getElementById("dimHint"),
   startGameBtn: document.getElementById("startGameBtn"),
   backToSetupBtn: document.getElementById("backToSetupBtn"),
   toggleControlsBtn: document.getElementById("toggleControlsBtn"),
@@ -94,6 +100,8 @@ function wireEvents() {
   dom.setupCoordModeBtn.addEventListener("click", () => setSetupMode("coord"));
   dom.setupTwoPlayerBtn.addEventListener("click", () => setSetupOpponent("human"));
   dom.setupVsAIBtn.addEventListener("click", () => setSetupOpponent("ai"));
+  dom.setup3DBtn.addEventListener("click", () => setSetup4D(false));
+  dom.setup4DBtn.addEventListener("click", () => setSetup4D(true));
   dom.setupGravityToggle.addEventListener("change", () => {
     state.setupGravity = dom.setupGravityToggle.checked;
   });
@@ -123,6 +131,7 @@ function initializeSetupScreen() {
   dom.setupBoardSize.value = String(state.size);
   setSetupMode(state.setupMode);
   dom.setupGravityToggle.checked = state.setupGravity;
+  setSetup4D(state.setup4D);
   updateViewInputs();
 }
 
@@ -132,19 +141,34 @@ function setSetupMode(mode) {
   dom.setupCoordModeBtn.classList.toggle("active", mode === "coord");
 }
 
+function setSetup4D(enabled) {
+  state.setup4D = enabled;
+  dom.setup3DBtn.classList.toggle("active", !enabled);
+  dom.setup4DBtn.classList.toggle("active", enabled);
+  if (enabled && Number(dom.setupBoardSize.value) > 5) {
+    dom.setupBoardSize.value = "5";
+  }
+  dom.setupBoardSize.max = enabled ? "5" : "6";
+  dom.dimHint.textContent = enabled
+    ? "4D: N slices of N×N×N boards — 40 win directions. Brain-burning."
+    : "3D: one N×N×N board — 13 win directions.";
+}
+
 function setSetupOpponent(opponent) {
-  state.setupVsAI = (opponent === "ai");
+  state.setupVsAI = opponent === "ai";
   dom.setupTwoPlayerBtn.classList.toggle("active", opponent === "human");
   dom.setupVsAIBtn.classList.toggle("active", opponent === "ai");
 }
 
 function startConfiguredGame() {
   const size = Number(dom.setupBoardSize.value);
-  if (!Number.isInteger(size) || size < 4 || size > 6) {
+  const maxSize = state.setup4D ? 5 : 6;
+  if (!Number.isInteger(size) || size < 4 || size > maxSize) {
     dom.setupBoardSize.focus();
     return;
   }
 
+  state.is4D = state.setup4D;
   state.setupGravity = dom.setupGravityToggle.checked;
   state.gravity = state.setupGravity;
   state.gravityLocked = false;
@@ -171,6 +195,7 @@ function enterSetupPhase() {
   setSetupMode(state.mode);
   dom.setupGravityToggle.checked = state.gravity;
   setSetupOpponent(state.vsAI ? "ai" : "human");
+  setSetup4D(state.is4D);
 }
 
 function enterGamePhase() {
@@ -191,13 +216,22 @@ function setMode(mode) {
   dom.coordPanel.classList.toggle("hidden", mode !== "coord");
   dom.cameraPanel.classList.toggle("hidden", mode !== "visual");
   dom.boardPanel.classList.toggle("hidden", mode === "coord");
-  setMessage(
-    mode === "coord"
-      ? state.gravity
-        ? "Blind coordinate mode on. Enter x,y only."
-        : "Blind coordinate mode on. Enter x,y,z."
-      : "Visual mode on. Click a cell to place."
-  );
+
+  let msg;
+  if (mode === "coord") {
+    if (state.gravity) {
+      msg = state.is4D
+        ? "Blind mode on. Enter x,y,w."
+        : "Blind coordinate mode on. Enter x,y only.";
+    } else {
+      msg = state.is4D
+        ? "Blind mode on. Enter x,y,z,w."
+        : "Blind coordinate mode on. Enter x,y,z.";
+    }
+  } else {
+    msg = "Visual mode on. Click a cell to place.";
+  }
+  setMessage(msg);
   updateCoordInputUi();
   if (mode === "coord" && !dom.gameScreen.classList.contains("hidden")) {
     setGameControlsOpen(true);
@@ -214,11 +248,19 @@ function setGravityMode(enabled) {
   state.gravity = enabled;
   updateGravityUi();
   updateCoordInputUi();
-  setMessage(
-    enabled
-      ? "Gravity mode on. Select (x,y), then piece drops to the next z."
-      : "Gravity mode off. Place directly at (x,y,z)."
-  );
+  if (enabled) {
+    setMessage(
+      state.is4D
+        ? "Gravity on. Select (x,y,w), piece drops to next available z."
+        : "Gravity mode on. Select (x,y), then piece drops to the next z."
+    );
+  } else {
+    setMessage(
+      state.is4D
+        ? "Gravity off. Place directly at (x,y,z,w)."
+        : "Gravity mode off. Place directly at (x,y,z)."
+    );
+  }
   renderBoard();
 }
 
@@ -226,9 +268,17 @@ function newGame(size) {
   state.aiGeneration++;
   state.aiThinking = false;
   state.size = size;
-  state.board = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => Array.from({ length: size }, () => 0))
-  );
+  if (state.is4D) {
+    state.board = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => Array.from({ length: size }, () => 0))
+      )
+    );
+  } else {
+    state.board = Array.from({ length: size }, () =>
+      Array.from({ length: size }, () => Array.from({ length: size }, () => 0))
+    );
+  }
   state.currentPlayer = 1;
   state.winner = null;
   state.moves = [];
@@ -246,22 +296,48 @@ function newGame(size) {
 function tryPlaceFromInput() {
   if (state.aiThinking) return;
   if (state.winner) return;
-  const expectedCount = state.gravity ? 2 : 3;
+
+  let expectedCount;
+  if (state.is4D) {
+    expectedCount = state.gravity ? 3 : 4;
+  } else {
+    expectedCount = state.gravity ? 2 : 3;
+  }
+
   const parsed = parseCoord(dom.coordInput.value, expectedCount);
   if (!parsed) {
-    setMessage(
-      state.gravity
-        ? "Invalid input. Use x,y like 2,4."
-        : "Invalid input. Use x,y,z like 2,4,1."
-    );
+    if (state.is4D) {
+      setMessage(
+        state.gravity
+          ? "Invalid input. Use x,y,w like 2,4,1."
+          : "Invalid input. Use x,y,z,w like 2,4,1,3."
+      );
+    } else {
+      setMessage(
+        state.gravity
+          ? "Invalid input. Use x,y like 2,4."
+          : "Invalid input. Use x,y,z like 2,4,1."
+      );
+    }
     return;
   }
-  if (state.gravity) {
-    const [x, y] = parsed;
-    placeMoveWithGravity(x, y);
+
+  if (state.is4D) {
+    if (state.gravity) {
+      const [x, y, w] = parsed;
+      placeMoveWithGravity(x, y, w);
+    } else {
+      const [x, y, z, w] = parsed;
+      placeMove(x, y, z, w);
+    }
   } else {
-    const [x, y, z] = parsed;
-    placeMove(x, y, z);
+    if (state.gravity) {
+      const [x, y] = parsed;
+      placeMoveWithGravity(x, y, 0);
+    } else {
+      const [x, y, z] = parsed;
+      placeMove(x, y, z, 0);
+    }
   }
 }
 
@@ -274,61 +350,68 @@ function parseCoord(text, expectedCount) {
   return parts.map((v) => v - 1);
 }
 
-function placeMoveWithGravity(x, y) {
+function placeMoveWithGravity(x, y, w = 0) {
   if (state.winner) {
     setMessage("Game is over. Start a new game.");
     return;
   }
-  if (!inBounds(x, y, 0, state.size)) {
+  if (!inBounds(x, y, 0, state.size, state.is4D ? w : undefined)) {
     setMessage(`Out of bounds. Coordinates must be 1..${state.size}.`);
     return;
   }
-  const z = getDropZ(x, y);
+  const z = getDropZ(x, y, w);
   if (z === -1) {
-    setMessage(`Column (${x + 1},${y + 1}) is full.`);
+    const colLabel = state.is4D ? `(${x + 1},${y + 1},w=${w + 1})` : `(${x + 1},${y + 1})`;
+    setMessage(`Column ${colLabel} is full.`);
     return;
   }
   state.pendingDropAnim = {
     x,
     y,
     z,
+    w,
     dx: (state.size - 1 - z) * LAYER_DRIFT,
     dy: -1 * (state.size - 1 - z) * LAYER_DRIFT,
     dz: (state.size - 1 - z) * LAYER_SPACING,
   };
-  placeMove(x, y, z);
+  placeMove(x, y, z, w);
 }
 
-function placeMove(x, y, z) {
+function placeMove(x, y, z, w = 0) {
   if (state.winner) {
     setMessage("Game is over. Start a new game.");
     return;
   }
-  if (!inBounds(x, y, z, state.size)) {
+  if (!inBounds(x, y, z, state.size, state.is4D ? w : undefined)) {
     setMessage(`Out of bounds. Coordinates must be 1..${state.size}.`);
     return;
   }
-  if (state.board[z][y][x] !== 0) {
+  if (boardGet(state.board, x, y, z, w) !== 0) {
     setMessage("That cell is already occupied.");
     return;
   }
 
   const player = state.currentPlayer;
-  state.board[z][y][x] = player;
-  state.moves.push({ x, y, z, player });
+  boardSet(state.board, x, y, z, w, player);
+  const move = { x, y, z, player };
+  if (state.is4D) move.w = w;
+  state.moves.push(move);
   if (state.moves.length === 1) {
     state.gravityLocked = true;
     updateGravityUi();
   }
 
-  const winLine = findWinningLineFrom(x, y, z, player);
+  const winLine = findWinningLineFrom(x, y, z, w, player);
   if (winLine.length) {
     state.winner = player;
     state.winningLine = winLine;
-    setMessage(`Player ${player} wins with 4 in a line.`);
+    setMessage(`Player ${player} wins with 4 in a line!`);
   } else {
     state.currentPlayer = player === 1 ? 2 : 1;
-    setMessage(`Placed at (${x + 1},${y + 1},${z + 1}).`);
+    const coord = state.is4D
+      ? `(${x + 1},${y + 1},${z + 1},${w + 1})`
+      : `(${x + 1},${y + 1},${z + 1})`;
+    setMessage(`Placed at ${coord}.`);
   }
 
   renderBoard();
@@ -349,17 +432,21 @@ function undoMove() {
   }
   if (state.vsAI && state.moves.length >= 2 && state.currentPlayer === 1) {
     const aiM = state.moves.pop();
-    state.board[aiM.z][aiM.y][aiM.x] = 0;
+    boardSet(state.board, aiM.x, aiM.y, aiM.z, aiM.w ?? 0, 0);
     state.winner = null;
     state.winningLine = [];
     state.currentPlayer = 2;
   }
   const last = state.moves.pop();
-  state.board[last.z][last.y][last.x] = 0;
+  const lastW = last.w ?? 0;
+  boardSet(state.board, last.x, last.y, last.z, lastW, 0);
   state.winner = null;
   state.winningLine = [];
   state.currentPlayer = last.player;
-  setMessage(`Undid move at (${last.x + 1},${last.y + 1},${last.z + 1}).`);
+  const coord = state.is4D
+    ? `(${last.x + 1},${last.y + 1},${last.z + 1},${lastW + 1})`
+    : `(${last.x + 1},${last.y + 1},${last.z + 1})`;
+  setMessage(`Undid move at ${coord}.`);
   renderBoard();
   renderStatus();
   renderMoveLog();
@@ -392,10 +479,17 @@ function updateGravityUi() {
 }
 
 function updateCoordInputUi() {
-  dom.coordLabel.textContent = state.gravity
-    ? "Place at x,y (1-based)"
-    : "Place at x,y,z (1-based)";
-  dom.coordInput.placeholder = state.gravity ? "e.g. 2,4" : "e.g. 2,4,1";
+  if (state.is4D) {
+    dom.coordLabel.textContent = state.gravity
+      ? "Place at x,y,w (1-based)"
+      : "Place at x,y,z,w (1-based)";
+    dom.coordInput.placeholder = state.gravity ? "e.g. 2,4,1" : "e.g. 2,4,1,3";
+  } else {
+    dom.coordLabel.textContent = state.gravity
+      ? "Place at x,y (1-based)"
+      : "Place at x,y,z (1-based)";
+    dom.coordInput.placeholder = state.gravity ? "e.g. 2,4" : "e.g. 2,4,1";
+  }
 }
 
 function handleViewChange() {
@@ -510,12 +604,13 @@ function onWheelZoom(e) {
 }
 
 function applyViewTransform() {
-  const layers = dom.boardContainer.querySelector(".layers");
-  if (!layers) return;
-  layers.style.setProperty("--rot-x", `${state.view.rotX}deg`);
-  layers.style.setProperty("--rot-z", `${state.view.rotZ}deg`);
-  layers.style.setProperty("--camera-z", `${state.view.distance}px`);
-  layers.style.setProperty("--board-shift-y", `${getBoardShiftY()}px`);
+  const allLayers = dom.boardContainer.querySelectorAll(".layers");
+  allLayers.forEach((layers) => {
+    layers.style.setProperty("--rot-x", `${state.view.rotX}deg`);
+    layers.style.setProperty("--rot-z", `${state.view.rotZ}deg`);
+    layers.style.setProperty("--camera-z", `${state.view.distance}px`);
+    layers.style.setProperty("--board-shift-y", `${getBoardShiftY()}px`);
+  });
 }
 
 function renderMoveLog() {
@@ -525,7 +620,10 @@ function renderMoveLog() {
   }
   const rows = state.moves.map((m, i) => {
     const p = `P${m.player}`;
-    return `<div class="log-row">${String(i + 1).padStart(2, "0")}. ${p} @ (${m.x + 1},${m.y + 1},${m.z + 1})</div>`;
+    const coord = state.is4D
+      ? `(${m.x + 1},${m.y + 1},${m.z + 1},${(m.w ?? 0) + 1})`
+      : `(${m.x + 1},${m.y + 1},${m.z + 1})`;
+    return `<div class="log-row">${String(i + 1).padStart(2, "0")}. ${p} @ ${coord}</div>`;
   });
   dom.moveLog.innerHTML = rows.join("");
 }
@@ -541,22 +639,64 @@ function renderBoard() {
 }
 
 function ensureBoardStructure(size) {
-  const current = dom.boardContainer.querySelector(".layers");
-  if (current && Number(current.dataset.size) === size) return;
+  const root = dom.boardContainer.firstElementChild;
+  const expectedClass = state.is4D ? "boards-4d" : "layers";
+  const expectedDims = state.is4D ? "4" : "3";
+  if (
+    root &&
+    Number(root.dataset.size) === size &&
+    root.classList.contains(expectedClass) &&
+    root.dataset.dims === expectedDims
+  )
+    return;
 
   dom.boardContainer.innerHTML = "";
+  dom.boardContainer.classList.toggle("mode-4d", state.is4D);
+
+  if (state.is4D) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "boards-4d";
+    wrapper.dataset.size = String(size);
+    wrapper.dataset.dims = "4";
+
+    for (let w = 0; w < size; w += 1) {
+      const section = document.createElement("div");
+      section.className = "w-section";
+
+      section.appendChild(createLayersForSlice(size, w));
+
+      const label = document.createElement("div");
+      label.className = "w-section-label";
+      label.textContent = `w=${w + 1}`;
+      section.appendChild(label);
+      wrapper.appendChild(section);
+    }
+
+    dom.boardContainer.appendChild(wrapper);
+  } else {
+    const layers = createLayersForSlice(size, null);
+    layers.dataset.dims = "3";
+    dom.boardContainer.appendChild(layers);
+  }
+}
+
+function createLayersForSlice(size, w) {
+  const is4D = state.is4D;
+  const cellSize = is4D ? 32 : 38;
+  const cellGap = is4D ? 3 : 4;
+  const boardPad = is4D ? 12 : 16;
+  const boardWidth = size * cellSize + (size - 1) * cellGap + boardPad;
+  const totalSize = boardWidth + (size - 1) * LAYER_DRIFT;
+
   const layers = document.createElement("div");
   layers.className = "layers";
-  layers.dataset.size = String(size);
-
-  const spacing = LAYER_SPACING;
-  const boardWidth = size * 42 + 20;
+  if (w !== null) layers.dataset.w = String(w);
 
   for (let z = 0; z < size; z += 1) {
     const layer = document.createElement("div");
     layer.className = "layer";
-    layer.style.gridTemplateColumns = `repeat(${size}, 38px)`;
-    layer.style.transform = `translate3d(${z * LAYER_DRIFT}px, ${-z * LAYER_DRIFT}px, ${z * spacing}px)`;
+    layer.style.gridTemplateColumns = `repeat(${size}, ${cellSize}px)`;
+    layer.style.transform = `translate3d(${z * LAYER_DRIFT}px, ${-z * LAYER_DRIFT}px, ${z * LAYER_SPACING}px)`;
 
     for (let y = 0; y < size; y += 1) {
       for (let x = 0; x < size; x += 1) {
@@ -565,28 +705,30 @@ function ensureBoardStructure(size) {
         btn.dataset.x = String(x);
         btn.dataset.y = String(y);
         btn.dataset.z = String(z);
+        if (w !== null) btn.dataset.w = String(w);
+        const wVal = w !== null ? w : 0;
         btn.addEventListener("click", () => {
           if (state.aiThinking) return;
           if (state.gravity) {
-            placeMoveWithGravity(x, y);
+            placeMoveWithGravity(x, y, wVal);
           } else {
-            placeMove(x, y, z);
+            placeMove(x, y, z, wVal);
           }
         });
         layer.appendChild(btn);
       }
     }
 
-    const label = document.createElement("div");
-    label.className = "layer-label";
-    label.textContent = `z=${z + 1}`;
-    layer.appendChild(label);
+    const layerLabel = document.createElement("div");
+    layerLabel.className = "layer-label";
+    layerLabel.textContent = `z=${z + 1}`;
+    layer.appendChild(layerLabel);
     layers.appendChild(layer);
   }
 
-  layers.style.width = `${boardWidth + (size - 1) * 18}px`;
-  layers.style.height = `${boardWidth + (size - 1) * 18}px`;
-  dom.boardContainer.appendChild(layers);
+  layers.style.width = `${totalSize}px`;
+  layers.style.height = `${totalSize}px`;
+  return layers;
 }
 
 function updateBoardCells() {
@@ -596,7 +738,8 @@ function updateBoardCells() {
     const x = Number(btn.dataset.x);
     const y = Number(btn.dataset.y);
     const z = Number(btn.dataset.z);
-    const v = state.board[z][y][x];
+    const w = btn.dataset.w !== undefined ? Number(btn.dataset.w) : 0;
+    const v = boardGet(state.board, x, y, z, w);
 
     btn.classList.remove("p1", "p2", "win", "drop-in");
     if (v === 1) {
@@ -609,20 +752,22 @@ function updateBoardCells() {
       btn.textContent = "·";
     }
 
-    if (isWinningCoord(x, y, z)) {
+    if (isWinningCoord(x, y, z, w)) {
       btn.classList.add("win");
     }
 
+    const anim = state.pendingDropAnim;
     if (
-      state.pendingDropAnim &&
+      anim &&
       !didApplyDropAnim &&
-      x === state.pendingDropAnim.x &&
-      y === state.pendingDropAnim.y &&
-      z === state.pendingDropAnim.z
+      x === anim.x &&
+      y === anim.y &&
+      z === anim.z &&
+      w === (anim.w ?? 0)
     ) {
-      btn.style.setProperty("--drop-from-x", `${state.pendingDropAnim.dx}px`);
-      btn.style.setProperty("--drop-from-y", `${state.pendingDropAnim.dy}px`);
-      btn.style.setProperty("--drop-from-z", `${state.pendingDropAnim.dz}px`);
+      btn.style.setProperty("--drop-from-x", `${anim.dx}px`);
+      btn.style.setProperty("--drop-from-y", `${anim.dy}px`);
+      btn.style.setProperty("--drop-from-z", `${anim.dz}px`);
       btn.classList.add("drop-in");
       didApplyDropAnim = true;
     }
@@ -634,36 +779,43 @@ function updateBoardCells() {
   }
 }
 
-function isWinningCoord(x, y, z) {
-  return state.winningLine.some((c) => c.x === x && c.y === y && c.z === z);
+function isWinningCoord(x, y, z, w = 0) {
+  return state.winningLine.some(
+    (c) => c.x === x && c.y === y && c.z === z && (state.is4D ? c.w === w : true)
+  );
 }
 
-function findWinningLineFrom(x, y, z, player) {
-  for (const [dx, dy, dz] of dirs) {
-    const line = [{ x, y, z }];
+function findWinningLineFrom(x, y, z, w, player) {
+  w = w ?? 0;
+  const dirs = getDirs();
+  for (const dir of dirs) {
+    const [dx, dy, dz, dw = 0] = dir;
+    const line = [{ x, y, z, w }];
 
     for (let step = 1; step < WIN_LENGTH; step += 1) {
       const nx = x + dx * step;
       const ny = y + dy * step;
       const nz = z + dz * step;
-      if (!inBounds(nx, ny, nz, state.size)) break;
-      if (state.board[nz][ny][nx] !== player) break;
-      line.push({ x: nx, y: ny, z: nz });
+      const nw = w + dw * step;
+      if (!inBounds(nx, ny, nz, state.size, state.is4D ? nw : undefined)) break;
+      if (boardGet(state.board, nx, ny, nz, nw) !== player) break;
+      line.push({ x: nx, y: ny, z: nz, w: nw });
     }
 
     for (let step = 1; step < WIN_LENGTH; step += 1) {
       const nx = x - dx * step;
       const ny = y - dy * step;
       const nz = z - dz * step;
-      if (!inBounds(nx, ny, nz, state.size)) break;
-      if (state.board[nz][ny][nx] !== player) break;
-      line.unshift({ x: nx, y: ny, z: nz });
+      const nw = w - dw * step;
+      if (!inBounds(nx, ny, nz, state.size, state.is4D ? nw : undefined)) break;
+      if (boardGet(state.board, nx, ny, nz, nw) !== player) break;
+      line.unshift({ x: nx, y: ny, z: nz, w: nw });
     }
 
     if (line.length >= WIN_LENGTH) {
       for (let i = 0; i <= line.length - WIN_LENGTH; i += 1) {
         const slice = line.slice(i, i + WIN_LENGTH);
-        if (slice.some((c) => c.x === x && c.y === y && c.z === z)) {
+        if (slice.some((c) => c.x === x && c.y === y && c.z === z && (c.w ?? 0) === w)) {
           return slice;
         }
       }
@@ -674,7 +826,7 @@ function findWinningLineFrom(x, y, z, player) {
   return [];
 }
 
-function buildDirections() {
+function buildDirections3D() {
   const out = [];
   for (let dz = -1; dz <= 1; dz += 1) {
     for (let dy = -1; dy <= 1; dy += 1) {
@@ -690,20 +842,46 @@ function buildDirections() {
   return out;
 }
 
-function inBounds(x, y, z, size) {
-  return (
-    x >= 0 &&
-    x < size &&
-    y >= 0 &&
-    y < size &&
-    z >= 0 &&
-    z < size
-  );
+function buildDirections4D() {
+  const out = [];
+  for (let dw = -1; dw <= 1; dw += 1) {
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0 && dz === 0 && dw === 0) continue;
+          // canonical half-space: first non-zero component must be positive
+          const first = [dw, dz, dy, dx].find((v) => v !== 0);
+          if (first < 0) continue;
+          out.push([dx, dy, dz, dw]);
+        }
+      }
+    }
+  }
+  return out;
 }
 
-function getDropZ(x, y) {
+function getDirs() {
+  return state.is4D ? dirs4D : dirs3D;
+}
+
+function boardGet(board, x, y, z, w) {
+  return state.is4D ? board[w][z][y][x] : board[z][y][x];
+}
+
+function boardSet(board, x, y, z, w, val) {
+  if (state.is4D) board[w][z][y][x] = val;
+  else board[z][y][x] = val;
+}
+
+function inBounds(x, y, z, size, w) {
+  const base = x >= 0 && x < size && y >= 0 && y < size && z >= 0 && z < size;
+  if (w === undefined) return base;
+  return base && w >= 0 && w < size;
+}
+
+function getDropZ(x, y, w = 0) {
   for (let z = 0; z < state.size; z += 1) {
-    if (state.board[z][y][x] === 0) return z;
+    if (boardGet(state.board, x, y, z, w) === 0) return z;
   }
   return -1;
 }
@@ -725,22 +903,28 @@ function distance2D(a, b) {
 // ─── AI ──────────────────────────────────────────────────────────────────────
 
 function copyBoard(board) {
-  return board.map((l) => l.map((r) => r.slice()));
+  if (state.is4D) {
+    return board.map((wSlice) => wSlice.map((zSlice) => zSlice.map((row) => row.slice())));
+  }
+  return board.map((zSlice) => zSlice.map((row) => row.slice()));
 }
 
-function checkWinOnBoard(board, x, y, z, player, size) {
-  for (const [dx, dy, dz] of dirs) {
+function checkWinOnBoard(board, x, y, z, player, w = 0) {
+  const dirs = getDirs();
+  const size = state.size;
+  for (const dir of dirs) {
+    const [dx, dy, dz, dw = 0] = dir;
     let count = 1;
     for (let s = 1; s < WIN_LENGTH; s++) {
-      const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s;
-      if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) break;
-      if (board[nz][ny][nx] !== player) break;
+      const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s, nw = w + dw * s;
+      if (!inBounds(nx, ny, nz, size, state.is4D ? nw : undefined)) break;
+      if (boardGet(board, nx, ny, nz, nw) !== player) break;
       count++;
     }
     for (let s = 1; s < WIN_LENGTH; s++) {
-      const nx = x - dx * s, ny = y - dy * s, nz = z - dz * s;
-      if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) break;
-      if (board[nz][ny][nx] !== player) break;
+      const nx = x - dx * s, ny = y - dy * s, nz = z - dz * s, nw = w - dw * s;
+      if (!inBounds(nx, ny, nz, size, state.is4D ? nw : undefined)) break;
+      if (boardGet(board, nx, ny, nz, nw) !== player) break;
       count++;
     }
     if (count >= WIN_LENGTH) return true;
@@ -748,49 +932,58 @@ function checkWinOnBoard(board, x, y, z, player, size) {
   return false;
 }
 
-function evaluateBoard(board, size) {
+function evaluateBoard(board) {
+  const size = state.size;
   const mid = (size - 1) / 2;
   let score = 0;
+  const wRange = state.is4D ? size : 1;
 
-  for (const [dx, dy, dz] of dirs) {
-    for (let z = 0; z < size; z++) {
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          // check a window of WIN_LENGTH starting at (x,y,z) in direction (dx,dy,dz)
-          let ai = 0, opp = 0;
-          let valid = true;
-          for (let s = 0; s < WIN_LENGTH; s++) {
-            const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s;
-            if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) {
-              valid = false; break;
+  for (const dir of getDirs()) {
+    const [dx, dy, dz, dw = 0] = dir;
+    for (let w = 0; w < wRange; w++) {
+      for (let z = 0; z < size; z++) {
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            let ai = 0, opp = 0;
+            let valid = true;
+            for (let s = 0; s < WIN_LENGTH; s++) {
+              const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s, nw = w + dw * s;
+              if (!inBounds(nx, ny, nz, size, state.is4D ? nw : undefined)) {
+                valid = false;
+                break;
+              }
+              const v = boardGet(board, nx, ny, nz, nw);
+              if (v === 2) ai++;
+              else if (v === 1) opp++;
             }
-            const v = board[nz][ny][nx];
-            if (v === 2) ai++;
-            else if (v === 1) opp++;
+            if (!valid) continue;
+            if (ai > 0 && opp > 0) continue;
+            if (ai === 4) score += 100000;
+            else if (ai === 3) score += 500;
+            else if (ai === 2) score += 50;
+            else if (ai === 1) score += 5;
+            if (opp === 4) score -= 100000;
+            else if (opp === 3) score -= 600;
+            else if (opp === 2) score -= 60;
+            else if (opp === 1) score -= 5;
           }
-          if (!valid) continue;
-          if (ai > 0 && opp > 0) continue;
-          if (ai === 4) score += 100000;
-          else if (ai === 3) score += 500;
-          else if (ai === 2) score += 50;
-          else if (ai === 1) score += 5;
-          if (opp === 4) score -= 100000;
-          else if (opp === 3) score -= 600;
-          else if (opp === 2) score -= 60;
-          else if (opp === 1) score -= 5;
         }
       }
     }
   }
 
   // center bonus
-  for (let z = 0; z < size; z++) {
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const v = board[z][y][x];
-        if (v === 0) continue;
-        const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid)) * (mid - Math.abs(z - mid));
-        score += (v === 2 ? 1 : -1) * d * 0.5;
+  for (let w = 0; w < wRange; w++) {
+    for (let z = 0; z < size; z++) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const v = boardGet(board, x, y, z, w);
+          if (v === 0) continue;
+          let d =
+            (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid)) * (mid - Math.abs(z - mid));
+          if (state.is4D) d *= mid - Math.abs(w - mid);
+          score += (v === 2 ? 1 : -1) * d * 0.5;
+        }
       }
     }
   }
@@ -798,29 +991,44 @@ function evaluateBoard(board, size) {
   return score;
 }
 
-function getMoves(board, size, gravity) {
+function getMoves(board) {
+  const size = state.size;
+  const gravity = state.gravity;
   const moves = [];
   const mid = (size - 1) / 2;
+  const wRange = state.is4D ? size : 1;
 
   if (gravity) {
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        let z = -1;
-        for (let zi = 0; zi < size; zi++) {
-          if (board[zi][y][x] === 0) { z = zi; break; }
+    for (let w = 0; w < wRange; w++) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          let z = -1;
+          for (let zi = 0; zi < size; zi++) {
+            if (boardGet(board, x, y, zi, w) === 0) {
+              z = zi;
+              break;
+            }
+          }
+          if (z === -1) continue;
+          let d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid));
+          if (state.is4D) d *= mid - Math.abs(w - mid);
+          moves.push({ x, y, z, w, centerDist: -d });
         }
-        if (z === -1) continue;
-        const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid));
-        moves.push({ x, y, z, centerDist: -d });
       }
     }
   } else {
-    for (let z = 0; z < size; z++) {
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          if (board[z][y][x] !== 0) continue;
-          const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid)) * (mid - Math.abs(z - mid));
-          moves.push({ x, y, z, centerDist: -d });
+    for (let w = 0; w < wRange; w++) {
+      for (let z = 0; z < size; z++) {
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (boardGet(board, x, y, z, w) !== 0) continue;
+            let d =
+              (mid - Math.abs(x - mid)) *
+              (mid - Math.abs(y - mid)) *
+              (mid - Math.abs(z - mid));
+            if (state.is4D) d *= mid - Math.abs(w - mid);
+            moves.push({ x, y, z, w, centerDist: -d });
+          }
         }
       }
     }
@@ -830,10 +1038,10 @@ function getMoves(board, size, gravity) {
   return moves;
 }
 
-function minimax(board, size, gravity, depth, alpha, beta, isMaximizing) {
-  const moves = getMoves(board, size, gravity);
+function minimax(board, depth, alpha, beta, isMaximizing) {
+  const moves = getMoves(board);
   if (moves.length === 0 || depth === 0) {
-    return { score: evaluateBoard(board, size), move: null };
+    return { score: evaluateBoard(board), move: null };
   }
 
   const player = isMaximizing ? 2 : 1;
@@ -841,25 +1049,31 @@ function minimax(board, size, gravity, depth, alpha, beta, isMaximizing) {
   let bestScore = isMaximizing ? -Infinity : Infinity;
 
   for (const move of moves) {
-    const { x, y, z } = move;
-    board[z][y][x] = player;
+    const { x, y, z, w } = move;
+    boardSet(board, x, y, z, w ?? 0, player);
 
     let score;
-    if (checkWinOnBoard(board, x, y, z, player, size)) {
+    if (checkWinOnBoard(board, x, y, z, player, w ?? 0)) {
       score = isMaximizing ? 100000 + depth : -(100000 + depth);
     } else if (depth === 1) {
-      score = evaluateBoard(board, size);
+      score = evaluateBoard(board);
     } else {
-      score = minimax(board, size, gravity, depth - 1, alpha, beta, !isMaximizing).score;
+      score = minimax(board, depth - 1, alpha, beta, !isMaximizing).score;
     }
 
-    board[z][y][x] = 0;
+    boardSet(board, x, y, z, w ?? 0, 0);
 
     if (isMaximizing) {
-      if (score > bestScore) { bestScore = score; bestMove = move; }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = move;
+      }
       alpha = Math.max(alpha, bestScore);
     } else {
-      if (score < bestScore) { bestScore = score; bestMove = move; }
+      if (score < bestScore) {
+        bestScore = score;
+        bestMove = move;
+      }
       beta = Math.min(beta, bestScore);
     }
 
@@ -871,8 +1085,8 @@ function minimax(board, size, gravity, depth, alpha, beta, isMaximizing) {
 
 function getAIMove() {
   const board = copyBoard(state.board);
-  const depth = { 4: 4, 5: 3, 6: 2 }[state.size] || 2;
-  return minimax(board, state.size, state.gravity, depth, -Infinity, Infinity, true).move;
+  const depth = state.is4D ? 1 : { 4: 4, 5: 3, 6: 2 }[state.size] || 2;
+  return minimax(board, depth, -Infinity, Infinity, true).move;
 }
 
 function scheduleAIMove() {
@@ -886,9 +1100,9 @@ function scheduleAIMove() {
     setAIThinkingUI(false);
     if (move && !state.winner && state.currentPlayer === 2) {
       if (state.gravity) {
-        placeMoveWithGravity(move.x, move.y);
+        placeMoveWithGravity(move.x, move.y, move.w ?? 0);
       } else {
-        placeMove(move.x, move.y, move.z);
+        placeMove(move.x, move.y, move.z, move.w ?? 0);
       }
     }
   }, 50);
