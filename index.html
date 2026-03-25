@@ -33,6 +33,14 @@
           </label>
         </div>
 
+        <div class="control-group">
+          <label>Opponent</label>
+          <div class="mode-buttons">
+            <button id="setupTwoPlayerBtn" class="mode-btn active">2 Players</button>
+            <button id="setupVsAIBtn" class="mode-btn">vs AI</button>
+          </div>
+        </div>
+
         <button id="startGameBtn" class="start-btn">Start Game</button>
       </div>
     </section>
@@ -107,7 +115,7 @@
 
           <div class="legend">
             <span><i class="dot p1"></i> Player 1 (X)</span>
-            <span><i class="dot p2"></i> Player 2 (O)</span>
+            <span><i class="dot p2"></i> <span id="legendP2">Player 2 (O)</span></span>
           </div>
 
           <div class="control-group">

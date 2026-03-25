@@ -15,6 +15,10 @@ const state = {
   pendingDropAnim: null,
   setupMode: "visual",
   setupGravity: false,
+  vsAI: false,
+  aiThinking: false,
+  setupVsAI: false,
+  aiGeneration: 0,
   view: {
     rotX: 58,
     rotZ: -34,
@@ -41,6 +45,8 @@ const dom = {
   setupVisualModeBtn: document.getElementById("setupVisualModeBtn"),
   setupCoordModeBtn: document.getElementById("setupCoordModeBtn"),
   setupGravityToggle: document.getElementById("setupGravityToggle"),
+  setupTwoPlayerBtn: document.getElementById("setupTwoPlayerBtn"),
+  setupVsAIBtn: document.getElementById("setupVsAIBtn"),
   startGameBtn: document.getElementById("startGameBtn"),
   backToSetupBtn: document.getElementById("backToSetupBtn"),
   toggleControlsBtn: document.getElementById("toggleControlsBtn"),
@@ -67,6 +73,7 @@ const dom = {
   moveLog: document.getElementById("moveLog"),
   boardPanel: document.getElementById("boardPanel"),
   boardContainer: document.getElementById("boardContainer"),
+  legendP2: document.getElementById("legendP2"),
 };
 
 boot();
@@ -85,6 +92,8 @@ function wireEvents() {
   );
   dom.setupVisualModeBtn.addEventListener("click", () => setSetupMode("visual"));
   dom.setupCoordModeBtn.addEventListener("click", () => setSetupMode("coord"));
+  dom.setupTwoPlayerBtn.addEventListener("click", () => setSetupOpponent("human"));
+  dom.setupVsAIBtn.addEventListener("click", () => setSetupOpponent("ai"));
   dom.setupGravityToggle.addEventListener("change", () => {
     state.setupGravity = dom.setupGravityToggle.checked;
   });
@@ -123,6 +132,12 @@ function setSetupMode(mode) {
   dom.setupCoordModeBtn.classList.toggle("active", mode === "coord");
 }
 
+function setSetupOpponent(opponent) {
+  state.setupVsAI = (opponent === "ai");
+  dom.setupTwoPlayerBtn.classList.toggle("active", opponent === "human");
+  dom.setupVsAIBtn.classList.toggle("active", opponent === "ai");
+}
+
 function startConfiguredGame() {
   const size = Number(dom.setupBoardSize.value);
   if (!Number.isInteger(size) || size < 4 || size > 6) {
@@ -136,6 +151,11 @@ function startConfiguredGame() {
   dom.gravityToggle.checked = state.gravity;
   updateGravityUi();
 
+  state.vsAI = state.setupVsAI || false;
+  state.aiThinking = false;
+  state.aiGeneration++;
+  dom.legendP2.textContent = state.vsAI ? "AI (O)" : "Player 2 (O)";
+
   newGame(size);
   setMode(state.setupMode);
   enterGamePhase();
@@ -143,11 +163,14 @@ function startConfiguredGame() {
 }
 
 function enterSetupPhase() {
+  state.aiGeneration++;
+  state.aiThinking = false;
   dom.setupScreen.classList.remove("hidden");
   dom.gameScreen.classList.add("hidden");
   dom.setupBoardSize.value = String(state.size);
   setSetupMode(state.mode);
   dom.setupGravityToggle.checked = state.gravity;
+  setSetupOpponent(state.vsAI ? "ai" : "human");
 }
 
 function enterGamePhase() {
@@ -200,6 +223,8 @@ function setGravityMode(enabled) {
 }
 
 function newGame(size) {
+  state.aiGeneration++;
+  state.aiThinking = false;
   state.size = size;
   state.board = Array.from({ length: size }, () =>
     Array.from({ length: size }, () => Array.from({ length: size }, () => 0))
@@ -219,6 +244,7 @@ function newGame(size) {
 }
 
 function tryPlaceFromInput() {
+  if (state.aiThinking) return;
   if (state.winner) return;
   const expectedCount = state.gravity ? 2 : 3;
   const parsed = parseCoord(dom.coordInput.value, expectedCount);
@@ -309,12 +335,24 @@ function placeMove(x, y, z) {
   renderStatus();
   renderMoveLog();
   dom.coordInput.value = "";
+
+  if (state.vsAI && !state.winner && state.currentPlayer === 2) {
+    scheduleAIMove();
+  }
 }
 
 function undoMove() {
+  if (state.aiThinking) return;
   if (!state.moves.length) {
     setMessage("No moves to undo.");
     return;
+  }
+  if (state.vsAI && state.moves.length >= 2 && state.currentPlayer === 1) {
+    const aiM = state.moves.pop();
+    state.board[aiM.z][aiM.y][aiM.x] = 0;
+    state.winner = null;
+    state.winningLine = [];
+    state.currentPlayer = 2;
   }
   const last = state.moves.pop();
   state.board[last.z][last.y][last.x] = 0;
@@ -528,6 +566,7 @@ function ensureBoardStructure(size) {
         btn.dataset.y = String(y);
         btn.dataset.z = String(z);
         btn.addEventListener("click", () => {
+          if (state.aiThinking) return;
           if (state.gravity) {
             placeMoveWithGravity(x, y);
           } else {
@@ -681,4 +720,188 @@ function distance2D(a, b) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+
+function copyBoard(board) {
+  return board.map((l) => l.map((r) => r.slice()));
+}
+
+function checkWinOnBoard(board, x, y, z, player, size) {
+  for (const [dx, dy, dz] of dirs) {
+    let count = 1;
+    for (let s = 1; s < WIN_LENGTH; s++) {
+      const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s;
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) break;
+      if (board[nz][ny][nx] !== player) break;
+      count++;
+    }
+    for (let s = 1; s < WIN_LENGTH; s++) {
+      const nx = x - dx * s, ny = y - dy * s, nz = z - dz * s;
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) break;
+      if (board[nz][ny][nx] !== player) break;
+      count++;
+    }
+    if (count >= WIN_LENGTH) return true;
+  }
+  return false;
+}
+
+function evaluateBoard(board, size) {
+  const mid = (size - 1) / 2;
+  let score = 0;
+
+  for (const [dx, dy, dz] of dirs) {
+    for (let z = 0; z < size; z++) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          // check a window of WIN_LENGTH starting at (x,y,z) in direction (dx,dy,dz)
+          let ai = 0, opp = 0;
+          let valid = true;
+          for (let s = 0; s < WIN_LENGTH; s++) {
+            const nx = x + dx * s, ny = y + dy * s, nz = z + dz * s;
+            if (nx < 0 || nx >= size || ny < 0 || ny >= size || nz < 0 || nz >= size) {
+              valid = false; break;
+            }
+            const v = board[nz][ny][nx];
+            if (v === 2) ai++;
+            else if (v === 1) opp++;
+          }
+          if (!valid) continue;
+          if (ai > 0 && opp > 0) continue;
+          if (ai === 4) score += 100000;
+          else if (ai === 3) score += 500;
+          else if (ai === 2) score += 50;
+          else if (ai === 1) score += 5;
+          if (opp === 4) score -= 100000;
+          else if (opp === 3) score -= 600;
+          else if (opp === 2) score -= 60;
+          else if (opp === 1) score -= 5;
+        }
+      }
+    }
+  }
+
+  // center bonus
+  for (let z = 0; z < size; z++) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const v = board[z][y][x];
+        if (v === 0) continue;
+        const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid)) * (mid - Math.abs(z - mid));
+        score += (v === 2 ? 1 : -1) * d * 0.5;
+      }
+    }
+  }
+
+  return score;
+}
+
+function getMoves(board, size, gravity) {
+  const moves = [];
+  const mid = (size - 1) / 2;
+
+  if (gravity) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let z = -1;
+        for (let zi = 0; zi < size; zi++) {
+          if (board[zi][y][x] === 0) { z = zi; break; }
+        }
+        if (z === -1) continue;
+        const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid));
+        moves.push({ x, y, z, centerDist: -d });
+      }
+    }
+  } else {
+    for (let z = 0; z < size; z++) {
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (board[z][y][x] !== 0) continue;
+          const d = (mid - Math.abs(x - mid)) * (mid - Math.abs(y - mid)) * (mid - Math.abs(z - mid));
+          moves.push({ x, y, z, centerDist: -d });
+        }
+      }
+    }
+  }
+
+  moves.sort((a, b) => a.centerDist - b.centerDist);
+  return moves;
+}
+
+function minimax(board, size, gravity, depth, alpha, beta, isMaximizing) {
+  const moves = getMoves(board, size, gravity);
+  if (moves.length === 0 || depth === 0) {
+    return { score: evaluateBoard(board, size), move: null };
+  }
+
+  const player = isMaximizing ? 2 : 1;
+  let bestMove = null;
+  let bestScore = isMaximizing ? -Infinity : Infinity;
+
+  for (const move of moves) {
+    const { x, y, z } = move;
+    board[z][y][x] = player;
+
+    let score;
+    if (checkWinOnBoard(board, x, y, z, player, size)) {
+      score = isMaximizing ? 100000 + depth : -(100000 + depth);
+    } else if (depth === 1) {
+      score = evaluateBoard(board, size);
+    } else {
+      score = minimax(board, size, gravity, depth - 1, alpha, beta, !isMaximizing).score;
+    }
+
+    board[z][y][x] = 0;
+
+    if (isMaximizing) {
+      if (score > bestScore) { bestScore = score; bestMove = move; }
+      alpha = Math.max(alpha, bestScore);
+    } else {
+      if (score < bestScore) { bestScore = score; bestMove = move; }
+      beta = Math.min(beta, bestScore);
+    }
+
+    if (beta <= alpha) break;
+  }
+
+  return { score: bestScore, move: bestMove };
+}
+
+function getAIMove() {
+  const board = copyBoard(state.board);
+  const depth = { 4: 4, 5: 3, 6: 2 }[state.size] || 2;
+  return minimax(board, state.size, state.gravity, depth, -Infinity, Infinity, true).move;
+}
+
+function scheduleAIMove() {
+  const gen = ++state.aiGeneration;
+  state.aiThinking = true;
+  setAIThinkingUI(true);
+  setTimeout(() => {
+    if (gen !== state.aiGeneration) return;
+    const move = getAIMove();
+    state.aiThinking = false;
+    setAIThinkingUI(false);
+    if (move && !state.winner && state.currentPlayer === 2) {
+      if (state.gravity) {
+        placeMoveWithGravity(move.x, move.y);
+      } else {
+        placeMove(move.x, move.y, move.z);
+      }
+    }
+  }, 50);
+}
+
+function setAIThinkingUI(thinking) {
+  if (thinking) {
+    dom.turnText.textContent = "AI is thinking\u2026";
+    dom.boardContainer.style.opacity = "0.7";
+    dom.boardContainer.style.pointerEvents = "none";
+  } else {
+    dom.boardContainer.style.opacity = "";
+    dom.boardContainer.style.pointerEvents = "";
+    renderStatus();
+  }
 }
