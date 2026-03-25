@@ -136,8 +136,8 @@ function startConfiguredGame() {
   dom.gravityToggle.checked = state.gravity;
   updateGravityUi();
 
-  setMode(state.setupMode);
   newGame(size);
+  setMode(state.setupMode);
   enterGamePhase();
   setGameControlsOpen(state.mode === "coord");
 }
@@ -385,6 +385,7 @@ function updateViewInputs() {
 function onPointerDown(e) {
   if (state.mode !== "visual") return;
   if (!dom.boardContainer.contains(e.target)) return;
+  if (e.pointerType === "mouse" && e.target.closest(".cell")) return;
   state.drag.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   state.drag.active = true;
   if (state.drag.pointers.size === 1) {
@@ -397,7 +398,7 @@ function onPointerDown(e) {
     state.drag.pinchStartCamera = state.view.distance;
   }
   dom.boardContainer.classList.add("dragging");
-  e.preventDefault();
+  if (e.pointerType !== "mouse") e.preventDefault();
 }
 
 function onPointerMove(e) {
@@ -431,7 +432,7 @@ function onPointerMove(e) {
     updateViewInputs();
     applyViewTransform();
   }
-  e.preventDefault();
+  if (e.pointerType !== "mouse") e.preventDefault();
 }
 
 function onPointerUp(e) {
