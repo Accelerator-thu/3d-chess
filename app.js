@@ -675,6 +675,7 @@ function ensureBoardStructure(size) {
     dom.boardContainer.appendChild(wrapper);
   } else {
     const layers = createLayersForSlice(size, null);
+    layers.dataset.size = String(size);
     layers.dataset.dims = "3";
     dom.boardContainer.appendChild(layers);
   }
