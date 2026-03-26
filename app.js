@@ -1,8 +1,18 @@
 const WIN_LENGTH = 4;
 const LAYER_SPACING = 72;
 const LAYER_DRIFT = 18;
-const AI_NOISE = 50;   // small noise for regular vsAI play (±25 on leaf eval)
-const SIM_NOISE = 150; // higher noise for simulation to produce varied games
+const AI_NOISE = 50; // small noise for regular vsAI play (±25 on leaf eval)
+
+// Pre-computed AI-vs-AI results (50 games per config, depth 2/2/1, noise 150).
+// Generated offline via simulate.js. 1 = P1 win, 2 = P2 win, 0 = draw.
+const SIM_DATA = {
+  "4":  [1,2,2,2,1,2,2,2,1,0,2,2,2,2,2,1,0,2,2,1,1,2,1,1,2,1,2,2,2,1,2,2,1,2,2,1,1,2,0,2,1,0,1,1,1,0,1,1,1,1],
+  "4g": [2,1,1,2,1,2,2,1,0,2,1,1,1,1,1,2,1,1,1,2,2,1,2,2,2,1,1,1,2,2,1,2,2,2,2,2,2,2,1,1,1,1,2,1,2,2,2,2,2,2],
+  "5":  [1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,2,1,1,1,2,1,1,2,1,1,2,1,1,1,2,1,1,2,1,1,2,1,2],
+  "5g": [1,2,1,1,2,1,1,1,2,1,1,1,1,1,2,1,2,1,1,1,1,1,1,1,2,1,1,2,1,2,1,2,1,2,1,1,2,2,2,2,2,2,2,1,1,1,2,2,1,1],
+  "6":  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1],
+  "6g": [1,1,1,1,1,1,2,1,1,1,2,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1],
+};
 
 const state = {
   size: 5,
@@ -126,7 +136,7 @@ function wireEvents() {
   dom.boardContainer.addEventListener("click", suppressClickAfterDrag, true);
 
   dom.placeCoordBtn.addEventListener("click", tryPlaceFromInput);
-  dom.simBtn.addEventListener("click", runBattleSimulation);
+  dom.simBtn.addEventListener("click", showSimSample);
   dom.coordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") tryPlaceFromInput();
   });
@@ -1129,68 +1139,32 @@ function setAIThinkingUI(thinking) {
 
 // ─── Battle Simulator ────────────────────────────────────────────────────────
 
-async function simulateGame({ size, gravity, noiseLevel }) {
-  const savedSize = state.size, savedGravity = state.gravity, savedIs4D = state.is4D;
-  state.size = size;
-  state.gravity = gravity;
-  state.is4D = false;
-
-  const board = Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => Array(size).fill(0))
-  );
-  // Use shallow depth for speed: full play depth would hang the browser
-  const depth = { 4: 2, 5: 2, 6: 1 }[size] || 1;
-  let player = 1;
-
-  for (let i = 0; i < size ** 3; i++) {
-    const isMax = player === 2;
-    const result = minimax(board, depth, -Infinity, Infinity, isMax, noiseLevel);
-    if (!result.move) break;
-    const { x, y, z } = result.move;
-    boardSet(board, x, y, z, 0, player);
-    if (checkWinOnBoard(board, x, y, z, player)) {
-      state.size = savedSize; state.gravity = savedGravity; state.is4D = savedIs4D;
-      return player;
-    }
-    player = player === 1 ? 2 : 1;
-    // Yield every move so the browser stays responsive
-    await new Promise((r) => setTimeout(r, 0));
-  }
-
-  state.size = savedSize; state.gravity = savedGravity; state.is4D = savedIs4D;
-  return 0;
-}
-
-async function runBattleSimulation() {
-  const GAMES = 6;
+function showSimSample() {
+  const SAMPLE = 10;
   const configs = [
-    { size: 4, gravity: false },
-    { size: 4, gravity: true },
-    { size: 5, gravity: false },
-    { size: 5, gravity: true },
-    { size: 6, gravity: false },
-    { size: 6, gravity: true },
+    { size: 4, gravity: false, key: "4"  },
+    { size: 4, gravity: true,  key: "4g" },
+    { size: 5, gravity: false, key: "5"  },
+    { size: 5, gravity: true,  key: "5g" },
+    { size: 6, gravity: false, key: "6"  },
+    { size: 6, gravity: true,  key: "6g" },
   ];
-
-  dom.simBtn.disabled = true;
-
-  const rows = [];
-  for (let ci = 0; ci < configs.length; ci++) {
-    const cfg = configs[ci];
-    let p1 = 0, p2 = 0, draws = 0;
-    for (let g = 0; g < GAMES; g++) {
-      dom.simResults.innerHTML =
-        `<em>Config ${ci + 1}/${configs.length}, game ${g + 1}/${GAMES}\u2026</em>`;
-      const winner = await simulateGame({ ...cfg, noiseLevel: SIM_NOISE });
-      if (winner === 1) p1++;
-      else if (winner === 2) p2++;
-      else draws++;
+  const rows = configs.map(({ size, gravity, key }) => {
+    const all = SIM_DATA[key].slice();
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
     }
-    rows.push({ cfg, p1, p2, draws, total: GAMES });
-    renderSimResults(rows);
-  }
-
-  dom.simBtn.disabled = false;
+    const sample = all.slice(0, SAMPLE);
+    return {
+      cfg: { size, gravity },
+      p1: sample.filter((w) => w === 1).length,
+      p2: sample.filter((w) => w === 2).length,
+      draws: sample.filter((w) => w === 0).length,
+      total: SAMPLE,
+    };
+  });
+  renderSimResults(rows);
 }
 
 function renderSimResults(rows) {
