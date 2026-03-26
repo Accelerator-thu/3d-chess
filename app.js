@@ -1,6 +1,8 @@
 const WIN_LENGTH = 4;
 const LAYER_SPACING = 72;
 const LAYER_DRIFT = 18;
+const AI_NOISE = 50;   // small noise for regular vsAI play (±25 on leaf eval)
+const SIM_NOISE = 150; // higher noise for simulation to produce varied games
 
 const state = {
   size: 5,
@@ -79,7 +81,9 @@ const dom = {
   moveLog: document.getElementById("moveLog"),
   boardPanel: document.getElementById("boardPanel"),
   boardContainer: document.getElementById("boardContainer"),
-  legendP2: document.getElementById("legendP2"),
+  legendP2:   document.getElementById("legendP2"),
+  simBtn:     document.getElementById("simBtn"),
+  simResults: document.getElementById("simResults"),
 };
 
 boot();
@@ -122,6 +126,7 @@ function wireEvents() {
   dom.boardContainer.addEventListener("click", suppressClickAfterDrag, true);
 
   dom.placeCoordBtn.addEventListener("click", tryPlaceFromInput);
+  dom.simBtn.addEventListener("click", runBattleSimulation);
   dom.coordInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") tryPlaceFromInput();
   });
@@ -933,7 +938,7 @@ function checkWinOnBoard(board, x, y, z, player, w = 0) {
   return false;
 }
 
-function evaluateBoard(board) {
+function evaluateBoard(board, noiseLevel = 0) {
   const size = state.size;
   const mid = (size - 1) / 2;
   let score = 0;
@@ -989,6 +994,7 @@ function evaluateBoard(board) {
     }
   }
 
+  score += (Math.random() - 0.5) * noiseLevel;
   return score;
 }
 
@@ -1039,10 +1045,10 @@ function getMoves(board) {
   return moves;
 }
 
-function minimax(board, depth, alpha, beta, isMaximizing) {
+function minimax(board, depth, alpha, beta, isMaximizing, noiseLevel = 0) {
   const moves = getMoves(board);
   if (moves.length === 0 || depth === 0) {
-    return { score: evaluateBoard(board), move: null };
+    return { score: evaluateBoard(board, noiseLevel), move: null };
   }
 
   const player = isMaximizing ? 2 : 1;
@@ -1057,9 +1063,9 @@ function minimax(board, depth, alpha, beta, isMaximizing) {
     if (checkWinOnBoard(board, x, y, z, player, w ?? 0)) {
       score = isMaximizing ? 100000 + depth : -(100000 + depth);
     } else if (depth === 1) {
-      score = evaluateBoard(board);
+      score = evaluateBoard(board, noiseLevel);
     } else {
-      score = minimax(board, depth - 1, alpha, beta, !isMaximizing).score;
+      score = minimax(board, depth - 1, alpha, beta, !isMaximizing, noiseLevel).score;
     }
 
     boardSet(board, x, y, z, w ?? 0, 0);
@@ -1084,10 +1090,10 @@ function minimax(board, depth, alpha, beta, isMaximizing) {
   return { score: bestScore, move: bestMove };
 }
 
-function getAIMove() {
+function getAIMove(noiseLevel = 0) {
   const board = copyBoard(state.board);
   const depth = state.is4D ? 1 : { 4: 4, 5: 3, 6: 2 }[state.size] || 2;
-  return minimax(board, depth, -Infinity, Infinity, true).move;
+  return minimax(board, depth, -Infinity, Infinity, true, noiseLevel).move;
 }
 
 function scheduleAIMove() {
@@ -1096,7 +1102,7 @@ function scheduleAIMove() {
   setAIThinkingUI(true);
   setTimeout(() => {
     if (gen !== state.aiGeneration) return;
-    const move = getAIMove();
+    const move = getAIMove(AI_NOISE);
     state.aiThinking = false;
     setAIThinkingUI(false);
     if (move && !state.winner && state.currentPlayer === 2) {
@@ -1119,4 +1125,80 @@ function setAIThinkingUI(thinking) {
     dom.boardContainer.style.pointerEvents = "";
     renderStatus();
   }
+}
+
+// ─── Battle Simulator ────────────────────────────────────────────────────────
+
+function simulateGame({ size, gravity, noiseLevel }) {
+  const savedSize = state.size, savedGravity = state.gravity, savedIs4D = state.is4D;
+  state.size = size;
+  state.gravity = gravity;
+  state.is4D = false;
+
+  const board = Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => Array(size).fill(0))
+  );
+  const depth = { 4: 4, 5: 3, 6: 2 }[size] || 2;
+  let player = 1;
+
+  for (let i = 0; i < size ** 3; i++) {
+    const isMax = player === 2;
+    const result = minimax(board, depth, -Infinity, Infinity, isMax, noiseLevel);
+    if (!result.move) break;
+    const { x, y, z } = result.move;
+    boardSet(board, x, y, z, 0, player);
+    if (checkWinOnBoard(board, x, y, z, player)) {
+      state.size = savedSize; state.gravity = savedGravity; state.is4D = savedIs4D;
+      return player;
+    }
+    player = player === 1 ? 2 : 1;
+  }
+
+  state.size = savedSize; state.gravity = savedGravity; state.is4D = savedIs4D;
+  return 0;
+}
+
+async function runBattleSimulation() {
+  const GAMES = 10;
+  const configs = [
+    { size: 4, gravity: false },
+    { size: 4, gravity: true },
+    { size: 5, gravity: false },
+    { size: 5, gravity: true },
+    { size: 6, gravity: false },
+    { size: 6, gravity: true },
+  ];
+
+  dom.simBtn.disabled = true;
+  dom.simResults.innerHTML = "<em>Running\u2026</em>";
+
+  const rows = [];
+  for (const cfg of configs) {
+    let p1 = 0, p2 = 0, draws = 0;
+    for (let g = 0; g < GAMES; g++) {
+      const winner = simulateGame({ ...cfg, noiseLevel: SIM_NOISE });
+      if (winner === 1) p1++;
+      else if (winner === 2) p2++;
+      else draws++;
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    rows.push({ cfg, p1, p2, draws, total: GAMES });
+    renderSimResults(rows);
+  }
+
+  dom.simBtn.disabled = false;
+}
+
+function renderSimResults(rows) {
+  const label = (cfg) =>
+    `${cfg.size}\xd7${cfg.size}\xd7${cfg.size}${cfg.gravity ? " +grav" : ""}`;
+  const thead = `<tr><th>Config</th><th>P1 wins</th><th>P2 wins</th><th>Draws</th><th>P1 adv.</th></tr>`;
+  const tbody = rows
+    .map(({ cfg, p1, p2, draws, total }) => {
+      const adv = (((p1 - p2) / total) * 100).toFixed(0);
+      const sign = Number(adv) > 0 ? "+" : "";
+      return `<tr><td>${label(cfg)}</td><td>${p1}</td><td>${p2}</td><td>${draws}</td><td>${sign}${adv}%</td></tr>`;
+    })
+    .join("");
+  dom.simResults.innerHTML = `<table class="sim-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
 }

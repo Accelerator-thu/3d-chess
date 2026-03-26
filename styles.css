@@ -553,3 +553,11 @@ button:active {
     padding-top: 52px;
   }
 }
+
+/* ── Simulation results ──────────────────────────────────────────────────── */
+.sim-btn { margin-top: 6px; background: #444; color: #fff; }
+.sim-results { margin-top: 12px; font-size: 0.82rem; }
+.sim-table { border-collapse: collapse; width: 100%; }
+.sim-table th,
+.sim-table td { padding: 4px 8px; border: 1px solid var(--line); text-align: center; }
+.sim-table th { background: #f0f4fa; font-weight: 600; }
