@@ -1129,7 +1129,7 @@ function setAIThinkingUI(thinking) {
 
 // ─── Battle Simulator ────────────────────────────────────────────────────────
 
-function simulateGame({ size, gravity, noiseLevel }) {
+async function simulateGame({ size, gravity, noiseLevel }) {
   const savedSize = state.size, savedGravity = state.gravity, savedIs4D = state.is4D;
   state.size = size;
   state.gravity = gravity;
@@ -1138,7 +1138,8 @@ function simulateGame({ size, gravity, noiseLevel }) {
   const board = Array.from({ length: size }, () =>
     Array.from({ length: size }, () => Array(size).fill(0))
   );
-  const depth = { 4: 4, 5: 3, 6: 2 }[size] || 2;
+  // Use shallow depth for speed: full play depth would hang the browser
+  const depth = { 4: 2, 5: 2, 6: 1 }[size] || 1;
   let player = 1;
 
   for (let i = 0; i < size ** 3; i++) {
@@ -1152,6 +1153,8 @@ function simulateGame({ size, gravity, noiseLevel }) {
       return player;
     }
     player = player === 1 ? 2 : 1;
+    // Yield every move so the browser stays responsive
+    await new Promise((r) => setTimeout(r, 0));
   }
 
   state.size = savedSize; state.gravity = savedGravity; state.is4D = savedIs4D;
@@ -1159,7 +1162,7 @@ function simulateGame({ size, gravity, noiseLevel }) {
 }
 
 async function runBattleSimulation() {
-  const GAMES = 10;
+  const GAMES = 6;
   const configs = [
     { size: 4, gravity: false },
     { size: 4, gravity: true },
@@ -1170,17 +1173,18 @@ async function runBattleSimulation() {
   ];
 
   dom.simBtn.disabled = true;
-  dom.simResults.innerHTML = "<em>Running\u2026</em>";
 
   const rows = [];
-  for (const cfg of configs) {
+  for (let ci = 0; ci < configs.length; ci++) {
+    const cfg = configs[ci];
     let p1 = 0, p2 = 0, draws = 0;
     for (let g = 0; g < GAMES; g++) {
-      const winner = simulateGame({ ...cfg, noiseLevel: SIM_NOISE });
+      dom.simResults.innerHTML =
+        `<em>Config ${ci + 1}/${configs.length}, game ${g + 1}/${GAMES}\u2026</em>`;
+      const winner = await simulateGame({ ...cfg, noiseLevel: SIM_NOISE });
       if (winner === 1) p1++;
       else if (winner === 2) p2++;
       else draws++;
-      await new Promise((r) => setTimeout(r, 0));
     }
     rows.push({ cfg, p1, p2, draws, total: GAMES });
     renderSimResults(rows);
