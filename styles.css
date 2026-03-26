@@ -460,6 +460,76 @@ button:active {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ─── How to Play ────────────────────────────────────────────────────────── */
+
+.how-to-play {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.how-to-play summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--muted);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.how-to-play summary::-webkit-details-marker {
+  display: none;
+}
+
+.how-to-play summary::before {
+  content: "▶";
+  font-size: 0.7rem;
+  transition: transform 160ms ease;
+}
+
+.how-to-play[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.how-to-play summary:hover {
+  color: var(--ink);
+}
+
+.htp-body {
+  padding: 4px 16px 14px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.htp-body p {
+  margin: 6px 0;
+}
+
+.htp-body h3 {
+  margin: 12px 0 2px;
+  font-size: 0.88rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.htp-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #f1f5fb;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 @media (max-width: 980px) {
   .setup-screen {
     padding: 10px;

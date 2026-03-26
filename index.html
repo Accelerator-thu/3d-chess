@@ -51,6 +51,31 @@
         </div>
 
         <button id="startGameBtn" class="start-btn">Start Game</button>
+
+        <details class="how-to-play">
+          <summary>How to Play</summary>
+          <div class="htp-body">
+            <p><strong>Goal:</strong> Be the first to place <strong>4 stones in a row</strong> — in any direction across the 3D (or 4D) board.</p>
+
+            <h3>Winning lines</h3>
+            <p>Any straight line of 4 counts: rows, columns, verticals, and all 13 unique diagonals through the cube. In 4D mode this extends across the fourth dimension too.</p>
+
+            <h3>Visual mode</h3>
+            <p>The board is shown as stacked 2D layers in 3D perspective. Click any empty cell to place your stone. Drag to rotate the view; scroll or pinch to zoom.</p>
+
+            <h3>Blind Coordinates mode</h3>
+            <p>The board is hidden. Type coordinates as <code>x,y,z</code> (1-based) and press Place. Good for a mental challenge.</p>
+
+            <h3>Gravity mode</h3>
+            <p>You only pick an (x,y) column — your stone drops to the lowest empty z level, like Connect Four. Cannot be changed mid-game.</p>
+
+            <h3>Board size</h3>
+            <p>Choose 4–6. A size-4 board has 64 cells and plays fast; size-6 has 216 cells and is much harder.</p>
+
+            <h3>vs AI</h3>
+            <p>The AI uses minimax with alpha-beta pruning. It plays as Player 2 (O).</p>
+          </div>
+        </details>
       </div>
     </section>
 
